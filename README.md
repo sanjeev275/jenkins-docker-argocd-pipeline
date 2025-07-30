@@ -55,8 +55,9 @@ all automated via **Jenkins** and **ArgoCD**.
    - Clones repo  
    - Runs Maven build  
    - Performs SonarQube code analysis
-     [Jenkins-status](./screenshots/jenkins_dashboard.png)        
-     [Sonarqube](./screenshot/sonarqube.png)
+
+     [Jenkins-status](screenshots/jenkins_dashboard.png)        
+     [Sonarqube](screenshot/sonarqube.png)
 
 3. **Docker Image Build & Push**  
    Jenkins builds Docker image and pushes it to DockerHub.
@@ -64,11 +65,11 @@ all automated via **Jenkins** and **ArgoCD**.
 4. **Manifest Update**  
    Jenkins updates `deployment.yaml` with new image tag and pushes back to GitHub.
 
-   [updated version](./screenshot/updated.png)
+   [updated version](screenshot/updated.png)
 
 6. **Continuous Deployment via ArgoCD**  
    ArgoCD detects the change in GitHub → Syncs manifests → Updates app in Kubernetes.
-             [Argocd](./screenshots/argocd.png)
+             [Argocd](screenshots/argocd.png)
 
 ---
 
