@@ -1,68 +1,78 @@
-# 🚀 End-to-End CI/CD Pipeline with Jenkins, SonarQube, Docker & ArgoCD
-
-This repository showcases a complete **CI/CD pipeline** for a Java-based web application using modern DevOps tools.  
-It demonstrates how to go from **code commit → build → quality check → Docker image → Kubernetes deployment**  
-all automated via **Jenkins** and **ArgoCD**.
-
----
-
-## ✨ Features
-
-- **Jenkins Declarative Pipeline**
-  - Automated build and package with Maven
-  - Code quality analysis with SonarQube
-  - Build and push Docker image
-  - Update Kubernetes manifests in GitHub
-
-- **SonarQube Integration**
-  - Ensures code quality and security scanning before deployment
-
-- **Dockerized Application**
-  - Custom Docker image built from Maven WAR/JAR
-  - Push to DockerHub registry
-
-- **ArgoCD for Continuous Deployment**
-  - GitOps workflow to deploy new images to Kubernetes
-  - Automated sync and self-heal enabled
-
-- **Kubernetes Deployment**
-  - Declarative manifests (`deployment.yaml`, `service.yaml`)
-  - Scalable and reliable deployment to cluster
-
----
-
-## 🛠️ Tech Stack
-
-- **Java 21** (OpenJDK)
-- **Maven**
-- **Jenkins**
-- **SonarQube**
-- **Docker**
-- **Kubernetes**
-- **ArgoCD**
-- **GitHub**
-
----
-
-## 🔄 Workflow
-
-1. **Code Commit**  
-   Developer pushes code to GitHub.
-
-2. **Build & Quality Check**  
-   Jenkins:
-   - Clones repo  
-   - Runs Maven build  
-   - Performs SonarQube code analysis  
-
-3. **Docker Image Build & Push**  
-   Jenkins builds Docker image and pushes it to DockerHub.
-
-4. **Manifest Update**  
-   Jenkins updates `deployment.yaml` with new image tag and pushes back to GitHub.
-
-5. **Continuous Deployment via ArgoCD**  
-   ArgoCD detects the change in GitHub → Syncs manifests → Updates app in Kubernetes.
-
----
-
+pipeline {
+    agent any
+    tools {
+        maven 'maven'
+        jdk 'java'
+    }
+    environment {
+        SONARQUBE = 'sonarserver'  // Must match the name you configured
+        DOCKER_IMAGE = "sanjeev275/my-webapp"
+        MANIFEST_REPO = "https://github.com/sanjeev275/my-webapp-depoly.git"
+    }
+    stages {
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main', url: 'https://github.com/sanjeev275/jenkins-maven.git'
+            }
+        }
+        stage('Build war') {
+            steps {
+                sh 'mvn clean package'
+            }
+        }
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    withSonarQubeEnv('sonarserver') {
+                        withCredentials([string(credentialsId: 'sonarkey', variable: 'SONAR_TOKEN')]) {
+                            sh "mvn sonar:sonar -Dsonar.token=$SONAR_TOKEN -Dsonar.projectKey=my-webapp"
+                        }
+                    }
+                }
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    sh """
+                        docker build -t $DOCKER_IMAGE:${BUILD_NUMBER} .
+                    """
+                }
+            }
+        }
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub', 
+                                                     usernameVariable: 'DOCKER_USER', 
+                                                     passwordVariable: 'DOCKER_PASS')]) {
+                        sh """
+                            echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                            docker push $DOCKER_IMAGE:${BUILD_NUMBER}
+                        """
+                    }
+                }
+            }
+        }
+        stage('Update K8s Manifest Repo') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'github', 
+                                  usernameVariable: 'GIT_USER', 
+                                  passwordVariable: 'GIT_PASS')]) {
+                        sh """
+                            rm -rf manifest-repo
+                            git clone https://${GIT_USER}:${GIT_PASS}@github.com/sanjeev275/my-webapp-depoly.git manifest-repo
+                            cd manifest-repo
+                            sed -i 's|image: .*|image: ${DOCKER_IMAGE}:${BUILD_NUMBER}|' deployment.yaml
+                            git config user.email "jenkins@ci.com"
+                            git config user.name "Jenkins"
+                            git commit -am "Update image tag to build $BUILD_NUMBER"
+                            git push origin main
+                        """
+                    }
+                }
+            }
+        }
+    }
+}
